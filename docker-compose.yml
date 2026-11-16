@@ -1,0 +1,117 @@
+name: ttc-pipeline
+
+x-app: &app
+  build: .
+  image: ttc-pipeline:latest
+  restart: unless-stopped
+  environment: &app-env
+    DATABASE_URL: postgresql://ttc:${POSTGRES_PASSWORD:-ttc}@timescaledb:5432/ttc
+    KAFKA_BOOTSTRAP: redpanda:9092
+    POLL_INTERVAL_S: ${POLL_INTERVAL_S:-20}
+    VEHICLES_URL: ${VEHICLES_URL:-https://bustime.ttc.ca/gtfsrt/vehicles}
+    TRIPS_URL: ${TRIPS_URL:-https://bustime.ttc.ca/gtfsrt/trips}
+    STATIC_GTFS_URL: ${STATIC_GTFS_URL:-https://ckan0.cf.opendata.inter.prod-toronto.ca/dataset/bd4809dd-e289-4de8-bbde-c5c00dafbf4f/resource/28514055-d011-4ed7-8bb0-97961dfe2b66/download/surfacegtfs.zip}
+    FEED_USER_AGENT: ${FEED_USER_AGENT:-ttc-realtime-pipeline/0.1 (open-source data project)}
+    DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+    HEALTHCHECK_PING_URL: ${HEALTHCHECK_PING_URL:-}
+    LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+services:
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v24.2.7
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
+      - --mode=dev-container
+      - --smp=1
+      - --memory=512M
+      - --default-log-level=warn
+    ports:
+      - "127.0.0.1:19092:19092"
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  timescaledb:
+    image: timescale/timescaledb:2.17.2-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ttc
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ttc}
+      POSTGRES_DB: ttc
+      TS_TUNE_MEMORY: ${TS_TUNE_MEMORY:-1GB}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ttc -d ttc"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  migrate:
+    <<: *app
+    restart: "no"
+    command: ["migrate"]
+    depends_on:
+      timescaledb: { condition: service_healthy }
+
+  loader:
+    <<: *app
+    command: ["jobs"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  producer:
+    <<: *app
+    command: ["producer"]
+    depends_on:
+      redpanda: { condition: service_healthy }
+
+  processor:
+    <<: *app
+    command: ["processor"]
+    depends_on:
+      redpanda: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+
+  alerter:
+    <<: *app
+    command: ["alerter"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/ttc.json
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      TTC_DB_PASSWORD: ${POSTGRES_PASSWORD:-ttc}
+    ports:
+      - "${GRAFANA_BIND:-127.0.0.1}:3000:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+volumes:
+  redpanda-data:
+  pg-data:
+  grafana-data:

@@ -1,0 +1,17 @@
+apiVersion: 1
+datasources:
+  - name: TimescaleDB
+    uid: ttc-timescaledb
+    type: grafana-postgresql-datasource
+    access: proxy
+    url: timescaledb:5432
+    user: ttc
+    isDefault: true
+    jsonData:
+      database: ttc
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: true
+      maxOpenConns: 10
+    secureJsonData:
+      password: $TTC_DB_PASSWORD

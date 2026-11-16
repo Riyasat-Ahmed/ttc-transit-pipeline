@@ -1,0 +1,27 @@
+# VPS overlay: HTTPS in front of Grafana via Caddy (automatic Let's Encrypt).
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Needs DOMAIN in .env and a DNS A record pointing at the server.
+# Postgres/Redpanda stay bound to 127.0.0.1 (base file): reachable only via SSH tunnel.
+services:
+  caddy:
+    image: caddy:2.8.4
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [grafana]
+
+  grafana:
+    environment:
+      GF_SERVER_ROOT_URL: https://${DOMAIN}
+      GF_SECURITY_COOKIE_SECURE: "true"
+
+volumes:
+  caddy-data:
+  caddy-config:

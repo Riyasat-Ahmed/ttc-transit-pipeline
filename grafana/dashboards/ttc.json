@@ -1,0 +1,982 @@
+{
+  "uid": "ttc-transit",
+  "title": "TTC Real-Time Transit",
+  "description": "Contains information licensed under the Open Government Licence – Toronto.",
+  "tags": [
+    "ttc",
+    "gtfs"
+  ],
+  "timezone": "America/Toronto",
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "route",
+        "label": "Route",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "ttc-timescaledb"
+        },
+        "query": "SELECT route_short_name || ' ' || route_long_name AS __text, route_id AS __value FROM routes WHERE route_type <> 1 ORDER BY route_short_name::int NULLS LAST",
+        "definition": "routes",
+        "refresh": 1,
+        "sort": 0,
+        "current": {
+          "text": "504 King",
+          "value": "504"
+        }
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Live",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "geomap",
+      "title": "Vehicles now (colour = current delay, min)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ttc-timescaledb"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ttc-timescaledb"
+          },
+          "refId": "A",
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT v.lat, v.lon, v.vehicle_id, v.route_id,\n               coalesce(r.route_short_name || ' ' || r.route_long_name, v.route_id) AS route,\n               round(d.delay_s / 60.0, 1) AS delay_min,\n               v.ts AS reported_at\n        FROM (\n            SELECT DISTINCT ON (vehicle_id) *\n            FROM vehicle_positions\n            WHERE ts > now() - interval '3 minutes'\n            ORDER BY vehicle_id, ts DESC\n        ) v\n        LEFT JOIN routes r ON r.route_id = v.route_id\n        LEFT JOIN LATERAL (\n            SELECT delay_s FROM stop_delays sd\n            WHERE sd.trip_id = v.trip_id AND sd.scheduled_at > now() - interval '4 hours'\n            ORDER BY sd.feed_ts DESC, sd.stop_sequence DESC LIMIT 1\n        ) d ON true"
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 16,
+        "h": 16
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "m",
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2
+              },
+              {
+                "color": "orange",
+                "value": 5
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "view": {
+          "id": "coords",
+          "lat": 43.7,
+          "lon": -79.4,
+          "zoom": 10.5
+        },
+        "controls": {
+          "showZoom": true,
+          "mouseWheelZoom": true
+        },
+        "basemap": {
+          "type": "default",
+          "name": "Basemap"
+        },
+        "layers": [
+          {
+            "type": "markers",
+            "name": "Vehicles",
+            "location": {
+              "mode": "coords",
+              "latitude": "lat",
+              "longitude": "lon"
+            },
+            "config": {
+              "showLegend": true,
+              "style": {
+                "size": {
+                  "fixed": 4
+                },
+                "opacity": 0.8,
+                "color": {
+                  "field": "delay_min",
+                  "fixed": "dark-green"
+                },
+                "symbol": {
+                  "mode": "fixed",
+                  "fixed": "img/icons/marker/circle.svg"
+                }
+              }
+            },
+            "tooltip": true
+          }
+        ],
+        "tooltip": {
+          "mode": "details"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Vehicles reporting",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ttc-timescaledb"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ttc-timescaledb"
+          },
+          "refId": "A",
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT count(DISTINCT vehicle_id) AS vehicles FROM vehicle_positions\n        WHERE ts > now() - interval '3 minutes'"
+        }
+      ],
+      "gridPos": {
+        "x": 16,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Network avg delay (last hour)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ttc-timescaledb"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ttc-timescaledb"
+          },
+          "refId": "A",
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT avg(delay_s) / 60.0 AS \"avg delay\" FROM stop_delays\n        WHERE scheduled_at BETWEEN now() - interval '1 hour' AND now()"
+        }
+      ],
+      "gridPos": {
+        "x": 20,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "m",
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2
+              },
+              {
+                "color": "orange",
+                "value": 5
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value"
+      }
+    },
+    {
+      "id": 5,
+      "type": "bargauge",
+      "title": "10 latest-running routes (last hour, avg delay)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ttc-timescaledb"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ttc-timescaledb"
+          },
+          "refId": "A",
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT coalesce(r.route_short_name || ' ' || r.route_long_name, d.route_id) AS route,\n               avg(d.delay_s) / 60.0 AS avg_delay_min\n        FROM stop_delays d LEFT JOIN routes r USING (route_id)\n        WHERE d.scheduled_at BETWEEN now() - interval '1 hour' AND now()\n        GROUP BY 1 HAVING count(*) >= 20\n        ORDER BY 2 DESC LIMIT 10"
+        }
+      ],
+      "gridPos": {
+        "x": 16,
+        "y": 5,
+        "w": 8,
+        "h": 12
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "m",
+          "decimals": 1,
+          "min": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 2
+              },
+              {
+                "color": "orange",
+                "value": 5
+              },
+              {
+                "color": "red",
+                "value": 10
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "left",
+        "reduceOptions": {
+          "calcs": [],
+          "values": true,
+          "fields": "/^avg_delay_min$/"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "row",
+      "title": "Routes",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Worst routes (last hour): average and p90 delay",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ttc-timescaledb"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ttc-timescaledb"
+          },
+          "refId": "A",
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT coalesce(r.route_short_name || ' ' || r.route_long_name, d.route_id) AS \"Route\",\n               round(avg(d.delay_s) / 60.0, 1) AS \"Avg (min)\",\n               round((percentile_cont(0.9) WITHIN GROUP (ORDER BY d.delay_s) / 60.0)::numeric, 1)\n                   AS \"p90 (min)\",\n               count(*) AS \"Stop arrivals\"\n        FROM stop_delays d LEFT JOIN routes r USING (route_id)\n        WHERE d.scheduled_at BETWEEN now() - interval '1 hour' AND now()\n        GROUP BY 1 HAVING count(*) >= 20\n        ORDER BY 2 DESC LIMIT 25"
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 10,
+        "h": 11
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "Avg.*|p90.*"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 2
+                    },
+                    {
+                      "color": "orange",
+                      "value": 5
+                    },
+                    {
+                      "color": "red",
+                      "value": 10
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "type": "barchart",
+      "title": "Delay by hour of day: $route (past 7 days, Toronto time)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ttc-timescaledb"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ttc-timescaledb"
+          },
+          "refId": "A",
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT lpad(extract(hour FROM bucket AT TIME ZONE 'America/Toronto')::text, 2, '0')\n                   || ':00' AS hour,\n               sum(avg_delay_s * n) / sum(n) / 60.0 AS \"avg delay\",\n               avg(p90_delay_s) / 60.0 AS \"p90 delay (mean of hourly p90s)\"\n        FROM route_delay_1h\n        WHERE route_id = '$route' AND bucket > now() - interval '7 days'\n        GROUP BY 1 ORDER BY 1"
+        }
+      ],
+      "gridPos": {
+        "x": 10,
+        "y": 18,
+        "w": 14,
+        "h": 11
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "m",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "xField": "hour",
+        "orientation": "vertical",
+        "showValue": "never",
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Average delay over time: $route vs network (15 min buckets)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ttc-timescaledb"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ttc-timescaledb"
+          },
+          "refId": "A",
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "SELECT bucket AS time, sum(avg_delay_s * n) / sum(n) / 60.0 AS network\n        FROM route_delay_15m WHERE $__timeFilter(bucket)\n        GROUP BY 1 ORDER BY 1"
+        },
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ttc-timescaledb"
+          },
+          "refId": "B",
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "SELECT bucket AS time, avg_delay_s / 60.0 AS \"$route\"\n        FROM route_delay_15m WHERE route_id = '$route' AND $__timeFilter(bucket)\n        ORDER BY 1"
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 24,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "m",
+          "decimals": 1,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "On-time performance (daily job: −1 to +5 min)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ttc-timescaledb"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ttc-timescaledb"
+          },
+          "refId": "A",
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT o.service_date AS \"Service day\", coalesce(r.route_short_name || ' ' || r.route_long_name, o.route_id)\n                   AS \"Route\",\n               round(o.otp_pct::numeric, 1) AS \"On time %\", o.early AS \"Early\", o.on_time AS \"On time\",\n               o.late AS \"Late\", round((o.avg_delay_s / 60.0)::numeric, 1) AS \"Avg delay (min)\"\n        FROM route_otp_daily o LEFT JOIN routes r USING (route_id)\n        WHERE o.service_date = (SELECT max(service_date) FROM route_otp_daily) AND o.n >= 100\n        ORDER BY o.otp_pct ASC"
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 24,
+        "h": 8
+      }
+    },
+    {
+      "id": 11,
+      "type": "row",
+      "title": "Data quality",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 45,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Feed staleness (s since last new snapshot)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ttc-timescaledb"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ttc-timescaledb"
+          },
+          "refId": "A",
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT feed, extract(epoch FROM now() - max(feed_ts))::int AS staleness_s\n        FROM feed_health WHERE ts > now() - interval '1 day' AND ok GROUP BY feed"
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 46,
+        "w": 6,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 90
+              },
+              {
+                "color": "red",
+                "value": 300
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": true,
+          "fields": "/^staleness_s$/"
+        },
+        "colorMode": "background",
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "Polls OK (last 24 h)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ttc-timescaledb"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ttc-timescaledb"
+          },
+          "refId": "A",
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT 100.0 * count(*) FILTER (WHERE ok) / nullif(count(*), 0) AS pct\n        FROM feed_health WHERE ts > now() - interval '24 hours'"
+        }
+      ],
+      "gridPos": {
+        "x": 6,
+        "y": 46,
+        "w": 4,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 98
+              },
+              {
+                "color": "green",
+                "value": 99
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background"
+      }
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "Trips matched to schedule (last hour)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ttc-timescaledb"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ttc-timescaledb"
+          },
+          "refId": "A",
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT 100.0 * sum(matched_trips) / nullif(sum(matched_trips + unmatched_trips), 0) AS pct\n        FROM processor_stats WHERE topic = 'trip_updates' AND ts > now() - interval '1 hour'"
+        }
+      ],
+      "gridPos": {
+        "x": 10,
+        "y": 46,
+        "w": 5,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 80
+              },
+              {
+                "color": "green",
+                "value": 95
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background"
+      }
+    },
+    {
+      "id": 15,
+      "type": "stat",
+      "title": "Vehicles with no matching trip (last hour)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ttc-timescaledb"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ttc-timescaledb"
+          },
+          "refId": "A",
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT 100.0 * sum(unmatched_trips) / nullif(sum(matched_trips + unmatched_trips), 0)\n                   AS pct\n        FROM processor_stats WHERE topic = 'vehicle_positions'\n          AND ts > now() - interval '1 hour'"
+        }
+      ],
+      "gridPos": {
+        "x": 15,
+        "y": 46,
+        "w": 5,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value"
+      }
+    },
+    {
+      "id": 16,
+      "type": "stat",
+      "title": "End-to-end latency p95 (TTC publish → DB, last 15 min)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ttc-timescaledb"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ttc-timescaledb"
+          },
+          "refId": "A",
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT percentile_cont(0.95) WITHIN GROUP (\n                   ORDER BY extract(epoch FROM ingested_at - feed_ts)) AS latency\n        FROM vehicle_positions WHERE ts > now() - interval '15 minutes'"
+        }
+      ],
+      "gridPos": {
+        "x": 20,
+        "y": 46,
+        "w": 4,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 1,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 60
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "value"
+      }
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Messages per minute: received / malformed / duplicates dropped",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ttc-timescaledb"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ttc-timescaledb"
+          },
+          "refId": "A",
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "SELECT time_bucket('1 minute', ts) AS time,\n               sum(received) AS received, sum(malformed) AS malformed,\n               sum(duplicates) AS \"duplicates dropped\"\n        FROM processor_stats WHERE $__timeFilter(ts)\n        GROUP BY 1 ORDER BY 1"
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 51,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "Feed entity count per poll (gaps = failed or skipped polls)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ttc-timescaledb"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ttc-timescaledb"
+          },
+          "refId": "A",
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "SELECT ts AS time, feed AS metric, entity_count AS value\n        FROM feed_health WHERE $__timeFilter(ts) AND ok\n        ORDER BY 1"
+        }
+      ],
+      "gridPos": {
+        "x": 12,
+        "y": 51,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 19,
+      "type": "table",
+      "title": "Recent feed errors and bad messages",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ttc-timescaledb"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "ttc-timescaledb"
+          },
+          "refId": "A",
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT ts AS \"When\", feed AS \"Source\", coalesce(http_status::text, '') AS \"HTTP\",\n               error AS \"Error\"\n        FROM feed_health WHERE NOT ok AND ts > now() - interval '7 days'\n        UNION ALL\n        SELECT received_at, topic, '', error FROM bad_messages\n        WHERE received_at > now() - interval '7 days'\n        ORDER BY 1 DESC LIMIT 50"
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 59,
+        "w": 24,
+        "h": 7
+      }
+    },
+    {
+      "id": 20,
+      "type": "text",
+      "title": "",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "ttc-timescaledb"
+      },
+      "targets": [],
+      "gridPos": {
+        "x": 0,
+        "y": 66,
+        "w": 24,
+        "h": 2
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Contains information licensed under the Open Government Licence – Toronto. Data: TTC GTFS-Realtime (bustime.ttc.ca) and Surface Routes and Schedules for Bustime (City of Toronto Open Data)."
+      }
+    }
+  ]
+}

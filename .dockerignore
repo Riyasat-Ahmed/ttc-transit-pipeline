@@ -1,0 +1,10 @@
+.env
+.venv
+.git
+tests
+analysis
+docs
+grafana
+**/__pycache__
+.pytest_cache
+.ruff_cache
