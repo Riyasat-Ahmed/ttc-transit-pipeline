@@ -1,5 +1,7 @@
 # TTC Real-Time Transit Pipeline
 
+[![ci](https://github.com/Riyasat-Ahmed/ttc-transit-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/Riyasat-Ahmed/ttc-transit-pipeline/actions/workflows/ci.yml)
+
 Streams live TTC bus and streetcar positions and predictions, computes how late
 every trip is at every stop, and shows it on a live Grafana dashboard.
 
