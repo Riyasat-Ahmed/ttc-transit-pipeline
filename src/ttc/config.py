@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # Database
-    database_url: str = "postgresql://ttc:ttc@localhost:5432/ttc"
+    database_url: str = "postgresql://ttc:ttc@localhost:15432/ttc"
 
     # Broker
     kafka_bootstrap: str = "localhost:19092"

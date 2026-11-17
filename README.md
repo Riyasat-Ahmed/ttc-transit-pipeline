@@ -7,7 +7,20 @@ every trip is at every stop, and shows it on a live Grafana dashboard.
 
 > **Finding:** _pending: collecting 7 days of data. Run `analysis/weekly_finding.py` and paste `analysis/output/finding.md` here._
 
-<!-- ![Dashboard](docs/dashboard.png) -->
+![Dashboard](docs/dashboard_top.png)
+
+<sub>Live dashboard on a Monday evening: 1,807 vehicles, colour-coded by delay. [Full dashboard](docs/dashboard_full.png).</sub>
+
+**Measured on the first run (laptop, 2026-11-16):**
+
+| Metric | Target | Measured |
+|---|---|---|
+| End-to-end latency (TTC publish → DB), p95 | < 60 s | **21 s** (median 18 s) |
+| Polls succeeding | 99%+ | 100% |
+| Trips matched to the schedule | 80%+ | **99.9%** of scheduled trips (91% of all trip updates; the rest are unscheduled `NEW` trips) |
+| Duplicate rows in `stop_delays` | 0 | **0**, including after the restart tests |
+| Vehicles per snapshot | n/a | about 1,800 on about 180 routes |
+| Feed refresh interval | n/a | about 33 s |
 
 ## Architecture
 
@@ -49,7 +62,9 @@ flowchart LR
 * `scripts/restart_test.sh` SIGKILLs the processor while the producer keeps
   running, restarts it, and checks that every heartbeat published during the
   outage reached `feed_health` exactly once, every vehicle snapshot has rows,
-  and there are zero duplicate keys.
+  and there are zero duplicate keys. Results are in [docs/restart-test.md](docs/restart-test.md):
+  after a 5-minute SIGKILL outage (38,618 messages of backlog), the processor caught up
+  and the test passed.
 
 ### How delay is measured
 
@@ -69,6 +84,12 @@ actual) time for each stop but no `delay` field and no `start_date`. So:
    (`observed = true`), at one row per stop visit.
 3. Delays beyond ±2 h are dropped as outliers and counted on the data-quality panel.
 
+**Cold-start caveat:** for the first hour or two after the pipeline starts from empty, the
+delay numbers are biased. Stops scheduled before the start time only get rows if the bus is
+still on its way, so those rows skew late. Stops already passed ahead of schedule skew early.
+Once every stop visit is covered from approach to arrival, the bias disappears. It's
+negligible over a week of data, but don't read much into the first hour's charts.
+
 ## Quick start
 
 ```bash
@@ -76,6 +97,10 @@ cp .env.example .env        # optional locally; change the passwords on a server
 docker compose up -d --build
 open http://localhost:3000  # admin / admin (or GRAFANA_ADMIN_PASSWORD)
 ```
+
+Any Docker engine works. On a Mac without Docker Desktop (or where another macOS account
+already runs it), [Colima](https://github.com/abiosoft/colima) is a lightweight alternative:
+`brew install colima docker-compose && colima start --cpu 4 --memory 6 --disk 40`.
 
 Vehicles appear on the map within about a minute. Delays need the static schedule,
 which the `loader` downloads (66 MB) and loads in the first couple of minutes.
@@ -86,7 +111,7 @@ Useful commands:
 ```bash
 docker compose ps                                     # everything should be "running"
 docker compose exec redpanda rpk group describe ttc-processor   # consumer lag
-docker compose exec timescaledb psql -U ttc -d ttc    # poke at the data
+docker compose exec timescaledb psql -U ttc -d ttc    # poke at the data (host: localhost:15432)
 docker compose run --rm loader load-static --force    # reload the schedule now
 ./scripts/restart_test.sh 90                          # the no-loss / no-dupes test
 ```
@@ -134,7 +159,9 @@ and exponential backoff on errors (up to 5 min).
 uv sync
 uv run ruff check .
 uv run pytest                                    # offline: fixtures in tests/fixtures
-DATABASE_URL=postgresql://ttc:ttc@localhost:5432/ttc uv run pytest   # + DB idempotency tests
+# DB idempotency tests: use a scratch database (they TRUNCATE tables)
+docker compose exec timescaledb createdb -U ttc ttc_test
+DATABASE_URL=postgresql://ttc:ttc@localhost:15432/ttc_test uv run pytest
 ```
 
 `tests/fixtures/snapshots` holds 10 real feed snapshots (gzipped protobuf), and

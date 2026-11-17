@@ -62,7 +62,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--days", type=int, default=7)
     ap.add_argument("--db", default=os.environ.get(
-        "DATABASE_URL", "postgresql://ttc:ttc@localhost:5432/ttc"))
+        "DATABASE_URL", "postgresql://ttc:ttc@localhost:15432/ttc"))
     args = ap.parse_args()
     OUT.mkdir(exist_ok=True)
 

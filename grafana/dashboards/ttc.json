@@ -121,8 +121,8 @@
           "mouseWheelZoom": true
         },
         "basemap": {
-          "type": "default",
-          "name": "Basemap"
+          "type": "osm-standard",
+          "name": "OpenStreetMap"
         },
         "layers": [
           {
@@ -184,6 +184,15 @@
         "y": 1,
         "w": 4,
         "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
       },
       "options": {
         "reduceOptions": {
@@ -391,6 +400,10 @@
                 "value": {
                   "type": "color-background"
                 }
+              },
+              {
+                "id": "decimals",
+                "value": 1
               },
               {
                 "id": "thresholds",

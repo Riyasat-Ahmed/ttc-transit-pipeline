@@ -75,8 +75,10 @@ def main(settings: Settings) -> None:
         try:
             run_daily(settings, conn)
         except psycopg.OperationalError:
-            log.exception("database error in daily job; reconnecting")
+            log.exception("database error in daily job; reconnecting and retrying in 60 s")
             conn = db.connect(settings.database_url)
+            time.sleep(60)
+            continue
         sleep_s = settings.static_refresh_hours * 3600 - (time.monotonic() - started)
         log.info("daily job done", extra={"next_run_in_s": int(sleep_s)})
         time.sleep(max(60, sleep_s))

@@ -71,7 +71,7 @@ panels = [
         options={
             "view": {"id": "coords", "lat": 43.70, "lon": -79.40, "zoom": 10.5},
             "controls": {"showZoom": True, "mouseWheelZoom": True},
-            "basemap": {"type": "default", "name": "Basemap"},
+            "basemap": {"type": "osm-standard", "name": "OpenStreetMap"},
             "layers": [{
                 "type": "markers", "name": "Vehicles",
                 "location": {"mode": "coords", "latitude": "lat", "longitude": "lon"},
@@ -84,6 +84,8 @@ panels = [
     panel("stat", "Vehicles reporting", (16, 1, 4, 4), [target("""
         SELECT count(DISTINCT vehicle_id) AS vehicles FROM vehicle_positions
         WHERE ts > now() - interval '3 minutes'""")],
+        fieldConfig={"defaults": {"color": {"mode": "fixed", "fixedColor": "text"}},
+                     "overrides": []},
         options={"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "value"}),
     panel("stat", "Network avg delay (last hour)", (20, 1, 4, 4), [target("""
         SELECT avg(delay_s) / 60.0 AS "avg delay" FROM stop_delays
@@ -119,6 +121,7 @@ panels = [
         fieldConfig={"defaults": {"custom": {"align": "auto"}}, "overrides": [
             {"matcher": {"id": "byRegexp", "options": "Avg.*|p90.*"}, "properties": [
                 {"id": "custom.cellOptions", "value": {"type": "color-background"}},
+                {"id": "decimals", "value": 1},
                 {"id": "thresholds", "value": delay_thresholds()},
                 {"id": "color", "value": {"mode": "thresholds"}}]}]}),
     panel("barchart", "Delay by hour of day: $route (past 7 days, Toronto time)", (10, 18, 14, 11),

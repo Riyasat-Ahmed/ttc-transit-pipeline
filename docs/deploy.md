@@ -55,7 +55,7 @@ Postgres listens only on the server's `127.0.0.1`, so run the analysis from your
 through an SSH tunnel:
 
 ```bash
-ssh -N -L 15432:127.0.0.1:5432 root@SERVER &
+ssh -N -L 15432:127.0.0.1:15432 root@SERVER &
 uv run --extra analysis python analysis/weekly_finding.py \
   --db postgresql://ttc:YOUR_POSTGRES_PASSWORD@localhost:15432/ttc
 ```
