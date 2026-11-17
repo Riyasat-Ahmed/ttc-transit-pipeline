@@ -7,7 +7,7 @@ Any provider with a Canadian region works.
 
 ```bash
 ssh root@SERVER
-curl -fsSL https://raw.githubusercontent.com/<you>/<repo>/main/deploy/setup_vps.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Riyasat-Ahmed/ttc-transit-pipeline/main/deploy/setup_vps.sh | bash
 ```
 
 The script installs Docker (enabled on boot), sets the firewall to allow only SSH, 80 and 443,
@@ -20,7 +20,7 @@ Point an A record (e.g. `ttc.example.com`) at the server's IP.
 ## 3. App
 
 ```bash
-git clone https://github.com/<you>/<repo>.git ttc && cd ttc
+git clone https://github.com/Riyasat-Ahmed/ttc-transit-pipeline.git ttc && cd ttc
 cp .env.example .env
 # edit .env: set POSTGRES_PASSWORD, GRAFANA_ADMIN_PASSWORD, DOMAIN=ttc.example.com,
 #            DISCORD_WEBHOOK_URL, optionally HEALTHCHECK_PING_URL
